@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Browser with Downloads, Tabs, and Bookmarks</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header input {
+            width: 60%;
+            padding: 8px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+        }
+        header button {
+            padding: 8px 12px;
+            font-size: 14px;
+            background-color: #5c6bc0;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        header button:hover {
+            background-color: #3f51b5;
+        }
+        .tabs {
+            background-color: #fff;
+            display: flex;
+            padding: 10px 20px;
+            overflow-x: auto;
+            border-bottom: 1px solid #ccc;
+        }
+        .tab {
+            padding: 10px 20px;
+            margin-right: 10px;
+            cursor: pointer;
+            background-color: #f4f4f4;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .tab.active {
+            background-color: #5c6bc0;
+            color: white;
+        }
+        .tab-close {
+            margin-left: 10px;
+            cursor: pointer;
+            color: #ff4d4d;
+        }
+        .tabs .new-tab {
+            background-color: #ccc;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .content {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: white;
+        }
+        .content iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .download-panel {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            flex-direction: column;
+            height: 200px;
+            overflow-y: auto;
+            border-top: 2px solid #5c6bc0;
+            margin-top: 20px;
+            display: none;
+        }
+        .download-item {
+            background-color: #444;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .download-item a {
+            color: white;
+            text-decoration: none;
+        }
+        .download-item a:hover {
+            text-decoration: underline;
+        }
+        .bookmark-bar {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;
+        }
+        .bookmark-bar a {
+            color: white;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .bookmark-bar a:hover {
+            text-decoration: underline;
+        }
+        .clear-downloads {
+            padding: 8px 12px;
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .clear-downloads:hover {
+            background-color: #e53935;
+        }
+        .show-downloads {
+            padding: 8px 12px;
+            background-color: #5c6bc0;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <input type="text" id="searchBar" placeholder="Search or enter URL..." onkeydown="handleSearch(event)" />
+    <button onclick="openSearch()">Go</button>
+</header>
+
+<div class="tabs">
+    <div class="tab new-tab" onclick="openNewTab()">+ New Tab</div>
+</div>
+
+<div class="bookmark-bar" id="bookmarkBar">
+    <!-- Bookmarks will go here -->
+</div>
+
+<div class="content" id="contentArea">
+    <iframe id="currentIframe" src="about:blank"></iframe>
+</div>
+
+<!-- Download Panel -->
+<div class="download-panel" id="downloadPanel">
+    <h3>Downloads</h3>
+    <div id="downloadsList"></div>
+    <button class="clear-downloads" onclick="clearDownloads()">Clear Downloads</button>
+    <button class="show-downloads" onclick="toggleDownloadPanel()">Hide Downloads</button>
+</div>
+
+<script>
+    let currentTabIndex = -1;
+    const tabs = [];
+    const bookmarks = [];
+    const downloads = [];
+
+    // Open search or URL
+    function openSearch() {
+        const query = document.getElementById('searchBar').value;
+        if (query.trim() === '') return;
+
+        if (query.startsWith('http://') || query.startsWith('https://')) {
+            openTab(query);
+        } else {
+            openTab(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+        }
+        document.getElementById('searchBar').value = '';  // Clear the input
+    }
+
+    // Handle search with Enter key
+    function handleSearch(event) {
+        if (event.key === 'Enter') {
+            openSearch();
+        }
+    }
+
+    // Open a new tab
+    function openNewTab() {
+        openTab('about:blank');
+    }
+
+    // Create a new tab
+    function openTab(url) {
+        // Create new tab
+        const tabIndex = tabs.length;
+        tabs.push(url);
+        currentTabIndex = tabIndex;
+
+        // Create tab button
+        const tab = document.createElement('div');
+        tab.classList.add('tab');
+        tab.textContent = `Tab ${tabIndex + 1}`;
+        tab.onclick = () => switchTab(tabIndex);
+
+        // Add close button for tab
+        const closeBtn = document.createElement('span');
+        closeBtn.classList.add('tab-close');
+        closeBtn.textContent = '×';
+        closeBtn.onclick = (event) => closeTab(event, tabIndex);
+        tab.appendChild(closeBtn);
+
+        // Append tab to the tab bar
+        document.querySelector('.tabs').appendChild(tab);
+
+        // Switch to the newly opened tab
+        switchTab(tabIndex);
+
+        // Load content into the iframe
+        loadContent(url);
+    }
+
+    // Switch between tabs
+    function switchTab(tabIndex) {
+        currentTabIndex = tabIndex;
+
+        // Highlight active tab
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach((tab, index) => {
+            if (index === tabIndex) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+
+        // Load the corresponding content in the iframe
+        loadContent(tabs[tabIndex].url);
+    }
+
+    // Load content into iframe
+    function loadContent(url) {
+        const iframe = document.getElementById('currentIframe');
+        iframe.src = url;
+    }
+
+    // Close a tab
+    function closeTab(event, tabIndex) {
+        event.stopPropagation();
+
+        // Remove tab from UI
+        const tabs = document.querySelectorAll('.tab');
+        tabs[tabIndex].remove();
+
+        // Remove tab from array
+        tabs.splice(tabIndex, 1);
+
+        // If the current tab was closed, switch to the previous tab
+        if (tabIndex === currentTabIndex) {
+            if (tabs.length === 0) {
+                openNewTab();
+            } else {
+                currentTabIndex = Math.min(currentTabIndex, tabs.length - 1);
+                switchTab(currentTabIndex);
+            }
+        }
+    }
+
+    // Add bookmark
+    function addBookmark(url) {
+        if (bookmarks.includes(url)) return;
+        bookmarks.push(url);
+
+        const bookmarkBar = document.getElementById('bookmarkBar');
+        const bookmarkLink = document.createElement('a');
+        bookmarkLink.href = url;
+        bookmarkLink.textContent = `Bookmark ${bookmarks.length}`;
+        bookmarkLink.onclick = (e) => openTab(url);
+        bookmarkBar.appendChild(bookmarkLink);
+    }
+
+    // Real download and add it to the downloads section
+    function initiateDownload(filename, url) {
+        const download = {
+            filename: filename,
+            url: url,
+            status: 'Downloading...',
+            id: new Date().getTime()
+        };
+        downloads.push(download);
+        updateDownloadPanel();
+
+        // Create an anchor to trigger the download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+
+        // Simulate download completion after 3 seconds
+        setTimeout(() => {
+            download.status = 'Completed';
+            updateDownloadPanel();
+        }, 3000);
+    }
+
+    // Update the download panel with the latest downloads
+    function updateDownloadPanel() {
+        const downloadListElement = document.getElementById('downloadsList');
+        downloadListElement.innerHTML = '';
+        downloads.forEach(download => {
+            const downloadItem = document.createElement('div');
+            downloadItem.classList.add('download-item');
+            downloadItem.innerHTML = `
+                <a href="${download.url}" target="_blank">${download.filename}</a> - ${download.status}
+            `;
+            downloadListElement.appendChild(downloadItem);
+        });
+
+        // Show download panel if there are downloads
+        if (downloads.length > 0) {
+            document.getElementById('downloadPanel').style.display = 'flex';
+        }
+    }
+
+    // Clear all downloads
+    function clearDownloads() {
+        downloads.length = 0;
+        updateDownloadPanel();
+    }
+
+    // Toggle download panel visibility
+    function toggleDownloadPanel() {
+        const panel = document.getElementById('downloadPanel');
+        if (panel.style.display === 'none' || panel.style.display === '') {
+            panel.style.display = 'flex';
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+</script>
+
+</body>
+</html>
